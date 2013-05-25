@@ -4,6 +4,7 @@ import sys
 import gv
 import os, os.path
 import getopt
+import argparse
 
 # Import pygraph
 from pygraph.classes.graph import graph
@@ -49,7 +50,21 @@ def analyze(path):
 def main(argv):
     outputfile = "deps.png"
 
-    for root, dirs, files in os.walk(sys.argv[1]):
+    parser = argparse.ArgumentParser(description='Find coffeescript dependencies')
+    parser.add_argument('dirs', metavar='dir', nargs='+',
+                        help='directories to process')
+
+    parser.add_argument('-o', '--output', help='output file')
+
+    args = parser.parse_args()
+
+    
+    if args.output is not None:
+        outputfile = args.output
+
+
+
+    for root, dirs, files in os.walk(args.dirs[0]):
         for f in files:
             fullpath = os.path.join(root, f)
             if os.path.splitext(fullpath)[1] == '.coffee':
