@@ -33,17 +33,18 @@ def analyze(path):
     f = open(path, 'r')
     f_str = f.read()
     f.close()
-    #    print "Adding %s" % (nodename)
+
     gr.add_node(nodename)
 
     matched = re.findall('[\w\.]+\s*=\s*require\s*"((models|controllers)\/\w+)"', f_str)
 
     for item in matched:
         try:
-            deps[nodename].append(item)
+            deps[nodename].append(item[0])
         except KeyError:
             deps[nodename] = []
-            deps[nodename].append(item)
+            deps[nodename].append(item[0])
+
 
 # See http://docs.python.org/2/library/argparse.html#module-argparse
 # or getopts
@@ -55,14 +56,12 @@ def main(argv):
                         help='directories to process')
 
     parser.add_argument('-o', '--output', help='output file')
+    parser.add_argument('-t', action='store_true', help='show dependencies in text mode')
 
     args = parser.parse_args()
 
-    
     if args.output is not None:
         outputfile = args.output
-
-
 
     for root, dirs, files in os.walk(args.dirs[0]):
         for f in files:
@@ -71,13 +70,18 @@ def main(argv):
                 if not prune(fullpath):
                     analyze(fullpath)
 
+
     for item in deps:
-        #        print item
         for node in deps[item]:
-            # print node[0]
-            # print "\t %s.coffee" % (node[0])
-            gr.add_edge((item, "%s.coffee" % (node[0])))
-            #        print
+            gr.add_edge((item, "%s.coffee" % (node)))
+
+
+    if args.t:
+        for item in deps:
+            print item
+            for node in deps[item]:
+                print "\t %s.coffee" % (node)
+
 
 
     # Draw as PNG
