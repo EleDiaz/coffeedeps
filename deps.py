@@ -12,7 +12,7 @@ from pygraph.classes.digraph import digraph
 from pygraph.algorithms.searching import breadth_first_search
 from pygraph.readwrite.dot import write
 
-gr = graph()
+gr = digraph()
 
 pruned = ['node_modules']
 
@@ -34,8 +34,8 @@ def analyze(path):
     f_str = f.read()
     f.close()
 
+    #    gr.add_node(nodename, attrs=[("style","filled"), ("fillcolor","green")])
     gr.add_node(nodename)
-
     matched = re.findall('[\w\.]+\s*=\s*require\s*"((models|controllers)\/\w+)"', f_str)
 
     for item in matched:
@@ -89,6 +89,7 @@ def main(argv):
     gvv = gv.readstring(dot)
     gv.layout(gvv,'dot')
     gv.render(gvv,'png', outputfile)
+
 
 
 if __name__ == "__main__":
