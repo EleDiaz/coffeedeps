@@ -1,9 +1,11 @@
 import System.Environment
 import System.Directory
 import System.FilePath.Posix
+import System.FilePath ((</>), addTrailingPathSeparator)
 import Text.Regex.PCRE
 import Control.Monad
 import Data.List
+import Control.Applicative
 
 type Filename = FilePath
 type Folder   = FilePath
@@ -11,24 +13,27 @@ type Filepath = FilePath
 
 main :: IO ()
 main = do
-	args <- getArgs
-	results <- mapM processDir args -- :: IO [[(String, [String])]]
+	putStrLn "digraph{"
+	args  	<- getArgs
+	results <- mapM (processDir . addTrailingPathSeparator) args -- :: IO [[(String, [String])]]
 	let concatedResults = concat results -- :: [(String, [String])]
-	mapM_ printDependencies concatedResults -- :: IO ()
+	mapM_ printDot concatedResults -- :: IO ()
+	putStrLn "}"
 
 createListDiccionary :: (a -> b) -> a -> (a, b)
 createListDiccionary f item = (item, f item)
-		
+
 processDir :: Folder -> IO [(String, [String])]
 processDir dir = do
 	files <- getCoffeeFiles dir
-	mapM getDependencies files >>= return
+	paths <- filter (`notElem` [".", ".."]) <$> getDirectoryContents dir
+	(mapM getDependencies files) -- ++ (mapM processDir paths)
 
 getCoffeeFiles :: Folder -> IO [Filepath]
 getCoffeeFiles path = do
-	filenames <- getDirectoryContents path
-	let coffeeFilenames = filter isCoffeeFile filenames
-	return $ map (path ++) coffeeFilenames
+	paths <- getDirectoryContents path
+	let coffeeFilenames = filter isCoffeeFile paths
+	return $ (map (path ++) coffeeFilenames)
 	where
 		isCoffeeFile :: Filename -> Bool
 		isCoffeeFile filename = filename =~ ".coffee$" :: Bool
@@ -43,5 +48,10 @@ getDependencies filepath = do
 		moduleFolder = last $ splitPath $dropFileName $ dropExtension filepath
 		moduleName = takeFileName filepath
 
-printDependencies :: (String, [String]) -> IO ()
-printDependencies (key, array) = putStrLn (key ++ " -> " ++ (intercalate ", " array))
+printDot :: (String, [String]) -> IO ()
+printDot (key, array) = mapM_ putStrLn $ map (\x -> mdl ++ (wrapInQuotes x)) array
+	where 
+		mdl = wrapInQuotes ++ " -> "
+
+wrapInQuotes :: String -> String
+wrapInQuotes str = "\"" ++ str ++ "\""
