@@ -1,11 +1,9 @@
 import System.Environment
 import System.Directory
 import System.FilePath.Posix
-import System.FilePath ((</>), addTrailingPathSeparator)
 import Text.Regex.PCRE
 import Control.Monad
 import Data.List
-import Control.Applicative
 
 type Filename = FilePath
 type Folder   = FilePath
@@ -13,29 +11,40 @@ type Filepath = FilePath
 
 main :: IO ()
 main = do
-	putStrLn "digraph{"
-	args  	<- getArgs
-	results <- mapM (processDir . addTrailingPathSeparator) args -- :: IO [[(String, [String])]]
+	putStrLn "digraph\n{"
+	args <- getArgs
+	folders <- mapM getFolders args -- [[Folder]]
+	let folders' = map addTrailingPathSeparator $ concat  folders
+	results <- mapM processDir folders' -- :: IO [[(String, [String])]]
 	let concatedResults = concat results -- :: [(String, [String])]
-	mapM_ printDot concatedResults -- :: IO ()
+	mapM_ printDependencies concatedResults -- :: IO ()
 	putStrLn "}"
 
 createListDiccionary :: (a -> b) -> a -> (a, b)
 createListDiccionary f item = (item, f item)
-
+		
 processDir :: Folder -> IO [(String, [String])]
 processDir dir = do
-	files 	<- getCoffeeFiles dir
-	dirs 	<- filterM doesDirectoryExist <$> getDirectoryContents dir
-	dirs' 	<- filter (`notElem` [".", ".."]) <$> dirs
-	subDirsFiles  	<- mapM (processDir . (dir ++) . (addTrailingPathSeparator)) dirs' -- :: IO [[(String, [String])]] -- divide y venceras
-	liftM2 (++) (mapM getDependencies files) (return $ concat subDirsFiles)
+	files <- getCoffeeFiles dir
+	mapM getDependencies files
+
+getFolders :: Folder -> IO [FilePath]
+getFolders path = do
+	names <- getDirectoryContents path
+	folders <- filterM isDirectory $ map (combine path) names
+	folders' <- mapM getFolders folders
+	return $ folders ++ (concat folders')
+
+isDirectory :: Folder -> IO Bool
+isDirectory d = do
+    x <- doesDirectoryExist d
+    return $  (x && (notElem (takeFileName d) [".",",", ".."]))
 
 getCoffeeFiles :: Folder -> IO [Filepath]
 getCoffeeFiles path = do
-	paths <- getDirectoryContents path
-	let coffeeFilenames = filter isCoffeeFile paths
-	return (map (path ++) coffeeFilenames)
+	names <- getDirectoryContents path
+	let coffeeFilenames = filter isCoffeeFile names
+	return $ map (path ++) coffeeFilenames
 	where
 		isCoffeeFile :: Filename -> Bool
 		isCoffeeFile filename = filename =~ ".coffee$" :: Bool
@@ -47,13 +56,14 @@ getDependencies filepath = do
 	return (moduleFolder ++ moduleName, map last matches)
 	where 
 		pattern = "require \"([A-z/.]+)\""
-		moduleFolder = last $ splitPath $dropFileName $ dropExtension filepath
+		moduleFolder = last $ splitPath $ dropFileName $ dropExtension filepath
 		moduleName = takeFileName filepath
 
-printDot :: (String, [String]) -> IO ()
-printDot (key, array) = mapM_ putStrLn $ map (\x -> mdl ++ (wrapInQuotes x)) array
-	where 
-		mdl = wrapInQuotes (dropExtension key) ++ " -> "
+printDependencies :: (String, [String]) -> IO ()
+printDependencies (key, array) = mapM_ putStrLn $ map (getRelation key) array
+
+getRelation :: String -> String -> String
+getRelation a b = "\t" ++ (wrapInQuotes a) ++ " -> " ++ (wrapInQuotes b) ++ ";"
 
 wrapInQuotes :: String -> String
 wrapInQuotes str = "\"" ++ str ++ "\""
