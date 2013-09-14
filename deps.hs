@@ -3,61 +3,49 @@ import System.Directory
 import System.FilePath.Posix
 import Text.Regex.PCRE
 import Control.Monad
+import Control.Monad.Cont
 import Data.List
-
-type Filename = FilePath
-type Folder   = FilePath
-type Filepath = FilePath
 
 main :: IO ()
 main = do
-	putStrLn "digraph\n{"
-	args <- getArgs
-	folders <- mapM getFolders args -- [[Folder]]
-	let folders' = map addTrailingPathSeparator $ concat  folders
-	results <- mapM processDir folders' -- :: IO [[(String, [String])]]
-	let concatedResults = concat results -- :: [(String, [String])]
-	mapM_ printDependencies concatedResults -- :: IO ()
-	putStrLn "}"
+  putStrLn "digraph\n{"
+  args <- getArgs
+  mapM_ (\x -> runCont (getFolders x) processDir) args
+  putStrLn "}"
 
-createListDiccionary :: (a -> b) -> a -> (a, b)
-createListDiccionary f item = (item, f item)
-		
-processDir :: Folder -> IO [(String, [String])]
-processDir dir = do
-	files <- getCoffeeFiles dir
-	mapM getDependencies files
+processDir :: FilePath -> IO ()
+processDir dir = getDependencies dir >>= printDependencies
 
-getFolders :: Folder -> IO [FilePath]
-getFolders path = do
-	names <- getDirectoryContents path
-	folders <- filterM isDirectory $ map (combine path) names
-	folders' <- mapM getFolders folders
-	return $ folders ++ (concat folders')
+getFolders :: FilePath -> Cont (IO ()) FilePath
+getFolders path = cont $ \fun -> do
+	            names <- getDirectoryContents path
+                    foldr (filterDir fun) (return ()) names
+    where -- Se deberia poder mejorar los if, con alguna funcion que trate las monadas
+      filterDir :: (String -> IO ()) -> FilePath -> IO () -> IO ()
+      filterDir fun f xs = do dir <- isDirectory path'
+                              if dir then runCont (getFolders path') fun
+                              else
+                                  if isCoffeeFile path' then fun path'
+                                  else xs
+          where path' = combine path f -- addTrailingPathSeparator
 
-isDirectory :: Folder -> IO Bool
+isDirectory :: FilePath -> IO Bool
 isDirectory d = do
-    x <- doesDirectoryExist d
-    return $  (x && (notElem (takeFileName d) [".",",", ".."]))
+  x <- doesDirectoryExist d
+  return $ (x && (notElem (takeFileName d) [".",",", ".."]))
 
-getCoffeeFiles :: Folder -> IO [Filepath]
-getCoffeeFiles path = do
-	names <- getDirectoryContents path
-	let coffeeFilenames = filter isCoffeeFile names
-	return $ map (path ++) coffeeFilenames
-	where
-		isCoffeeFile :: Filename -> Bool
-		isCoffeeFile filename = filename =~ ".coffee$" :: Bool
+isCoffeeFile :: FilePath -> Bool
+isCoffeeFile filename = filename =~ ".coffee$" --  :: Bool
 
 getDependencies :: FilePath -> IO (String, [String])
 getDependencies filepath = do
-	dat <- readFile filepath
-	let matches = dat =~ pattern :: [[String]]
-	return (moduleFolder ++ moduleName, map last matches)
-	where 
-		pattern = "require \"([A-z/.]+)\""
-		moduleFolder = last $ splitPath $ dropFileName $ dropExtension filepath
-		moduleName = takeFileName filepath
+  dat <- readFile filepath
+  let matches = dat =~ pattern :: [[String]]
+  return (moduleFolder ++ moduleName, map last matches)
+    where
+      pattern = "require \"([A-z/.]+)\""
+      moduleFolder = last $ splitPath $ dropFileName $ dropExtension filepath
+      moduleName = takeFileName filepath
 
 printDependencies :: (String, [String]) -> IO ()
 printDependencies (key, array) = mapM_ putStrLn $ map (getRelation key) array
